@@ -110,7 +110,7 @@ Create a professional presentation with the following slides. Use a clean, moder
 **Key message:** End-to-end flow from intake to workspace.
 
 **Step 0 — Intake:**
-Data scientist submits: product_id=101, region=weu, sku=Standard_DS3_v2
+Data scientist submits: product_id=101, region=australiaeast, sku=Standard_DS3_v2
 (No environment field — all 3 envs are always created)
 
 **Allocator:** ceil(101/25) = 5 → sub-aml-{env}-pg05 → does not exist → vend
@@ -129,9 +129,9 @@ Data scientist submits: product_id=101, region=weu, sku=Standard_DS3_v2
 
 | Env | Workspace | Endpoint | RG |
 |---|---|---|---|
-| dev | mlw-dev-p101-weu | bep-p101-scoring | rg-aml-dev-p101 |
-| tst | mlw-tst-p101-weu | bep-p101-scoring | rg-aml-tst-p101 |
-| prd | mlw-prd-p101-weu | bep-p101-scoring | rg-aml-prd-p101 |
+| dev | mlw-dev-p101-aue | bep-p101-scoring | rg-aml-dev-p101 |
+| tst | mlw-tst-p101-aue | bep-p101-scoring | rg-aml-tst-p101 |
+| prd | mlw-prd-p101-aue | bep-p101-scoring | rg-aml-prd-p101 |
 
 **Products 102–125:** Skip steps 1–4 (sub already exists). Only ~15 min.
 

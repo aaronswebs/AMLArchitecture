@@ -1,12 +1,13 @@
 # Azure Machine Learning – Scale-Out Reference Architecture
 
-Architecture pattern for scaling an Azure Machine Learning estate from a **single subscription** to multiple AML-dedicated subscriptions, **without re-designing the existing Azure Landing Zone** and **reusing the existing subscription-stamping pipeline**.
+Architecture pattern for scaling an Azure Machine Learning estate from a **single subscription** today to **1,000+ ML products × 3 environments** in Australia, **without re-designing the existing Azure Landing Zone** and **reusing the existing subscription-stamping pipeline**. **Primary region: Australia East.** **Secondary region (DR + endpoint-cap relief): Australia Southeast.**
 
 ## Scenario
 
-- **100 ML products × 3 environments (dev / test / prod)** → 300 AML workspaces.
+- Today: **100 ML products × 3 environments (dev / test / prod)** → 300 AML workspaces in a single subscription in Australia East.
+- Target: scale the same model to **1,000+ ML products × 3 environments** → 3,000+ workspaces.
 - Each workspace has a **14-node batch compute cluster**; all workloads are **batch**.
-- **Everything currently in one subscription** → hitting hard AML regional caps (100 endpoints, 2,500 compute targets, VM core quotas).
+- **Everything currently in one subscription** → already hitting hard AML regional caps (100 endpoints, 2,500 compute targets, VM core quotas) at 100 products; structurally non-viable at 1,000.
 
 ## Scope
 
@@ -21,46 +22,46 @@ This document defines the **AML stamp** — the AML-specific module set that the
 
 ## TL;DR
 
-- Vend **12 AML-dedicated subscriptions** (`4 product-groups × 3 environments`) under the existing Corp application-landing-zone MG.
-- **25 products per subscription** → ≥ 4× headroom on every AML regional limit.
-- Add **two new modules** to the existing stamping pipeline:
-  - `aml-sub-shared` — runs once per subscription (shared ACR, DNS zone links, diagnostic routing).
-  - `aml-product-stamp` — runs once per product per env (workspace + storage + KV + AI + 14-node cluster + batch endpoint + PEs).
-- Prefer **batch endpoints** with multiple deployments per endpoint (≤ 20) to multiply model-version capacity without burning endpoint count.
-- Scale to 200 / 400 / 1,000 products by vending more `pg*` subscriptions — design is linear.
+Two target architectures, both designed for the **1,000-product capacity target** in Australia East with Australia Southeast as paired region for DR + endpoint-cap relief:
 
-## Target topology (AML-only view)
+- **v1 (managed compute)** — vend up to **120 AML-dedicated subscriptions** (`40 product-groups × 3 environments`), 25 products per sub, two new pipeline modules. Linear sub fan-out is the cost.
+- **v2 (AML on AKS)** — vend just **9 AML-dedicated subscriptions** (`3 PG × 3 env`) plus a shared AKS cluster per env per sub running the [AML extension](https://learn.microsoft.com/azure/machine-learning/how-to-attach-kubernetes-anywhere?view=azureml-api-2). Compute is pooled across products; subscriptions and peerings drop ~13×.
+- Both designs prefer **batch endpoints** with multiple deployments per endpoint (≤ 20) to multiply model-version capacity without burning endpoint count.
+- Both designs grow additively — vend the next product-group sub when an existing one nears 80 % of its budget. Australia Southeast is used **on demand only**, not as a baseline placement.
+
+## Target topology (AML-only view, 1,000-product target)
 
 ```mermaid
 flowchart TB
-    ALZ["[Existing ALZ]<br/>Corp application-landing-zone MG<br/>Hub VNet · Private DNS · Firewall · Log Analytics"]
+    ALZ["[Existing ALZ]<br/>Corp application-landing-zone MG<br/>Hub VNet (Australia East + Australia Southeast)<br/>Private DNS · Firewall · Log Analytics"]
     ALZ --> DEV["DEV"]
     ALZ --> TST["TEST"]
     ALZ --> PRD["PROD"]
     DEV --> D1["Sub: aml-dev-pg01 (P1-25)"]
-    DEV --> D2["Sub: aml-dev-pg02 (P26-50)"]
-    DEV --> D3["Sub: aml-dev-pg03 (P51-75)"]
-    DEV --> D4["Sub: aml-dev-pg04 (P76-100)"]
-    TST --> T1["Sub: aml-tst-pg01..04"]
-    PRD --> P1["Sub: aml-prd-pg01..04"]
+    DEV --> DN["… up to aml-dev-pg40 (P976-1000)<br/>region = aue"]
+    TST --> T1["aml-tst-pg01 … aml-tst-pg40<br/>region = aue"]
+    PRD --> P1["aml-prd-pg01 … aml-prd-pg40<br/>region = aue"]
+    PRD -. "on demand for DR /<br/>endpoint-cap overflow" .-> ASE["aml-prd-pg{nn}-ase<br/>region = ase"]
 ```
+
+The v2 (AKS) variant collapses the same 1,000-product capacity into **9 subscriptions** in Australia East with the same on-demand Australia Southeast option.
 
 ## Contents
 
-Two reference architectures cover the same scenario from different angles. Pick by scale and operating model:
+Two reference architectures cover the same scenario from different angles. Pick by scale and operating model. Both target **1,000+ products** with **Australia East as primary** and **Australia Southeast as on-demand paired region**.
 
 | | **v1 — Managed compute** | **v2 — AML on AKS** |
 |---|---|---|
 | Doc | [`docs/AML-Scale-Out-Architecture.md`](docs/AML-Scale-Out-Architecture.md) | [`docs/AML-AKS-ScaleOut-Architecture.md`](docs/AML-AKS-ScaleOut-Architecture.md) |
 | Compute | Per-product `AmlCompute` 14-node clusters | Shared multi-tenant AKS clusters with the [AML extension](https://learn.microsoft.com/azure/machine-learning/how-to-attach-kubernetes-anywhere?view=azureml-api-2) (`KubernetesCompute`) |
-| Subscriptions @ 100 products | 12 (4 PG × 3 env) | 3 (1 PG × 3 env) |
-| Subscriptions @ 1,000 products | 120 (40 PG × 3 env) | **9 (3 PG × 3 env)** |
-| Solves endpoint cap? | Partly (sub split) | Partly (sub split + multi-region) |
+| Subscriptions @ 100 products (existing) | 12 (4 PG × 3 env) in Australia East | 3 (1 PG × 3 env) in Australia East |
+| Subscriptions @ 1,000 products (target) | **120 (40 PG × 3 env)** in Australia East | **9 (3 PG × 3 env)** in Australia East |
+| Solves endpoint cap? | Partly (sub split) | Partly (sub split + Australia Southeast pair) |
 | Solves compute-target cap? | Partly | **Yes** — 1 attachment per workspace, unlimited namespaces |
-| Solves VM core quota fan-out? | Per-sub raise per family | **Yes** — pooled into AKS node pools |
+| Solves VM core quota fan-out? | Per-sub raise per family (↑120 raises) | **Yes** — pooled into AKS node pools (↓9 raises) |
 | Cost driver | Per-product compute, hard to share | **Pooled compute, spot pools, RIs on baseline** |
-| Multi-region | Per-product re-stamp | AKS pair + AML Registry replication |
-| Best for | < 300 products, single-region | **1,000+ products, cost-optimised, multi-region** |
+| Multi-region (AUE ↔ ASE) | Per-product re-stamp | AKS pair + AML Registry replication |
+| Best for | ≤ 300-product estates that will not grow | **1,000+ products, cost-optimised, in-country DR pair** |
 
 Both documents include:
   - Scope and assumptions (ALZ + stamping pre-existing)

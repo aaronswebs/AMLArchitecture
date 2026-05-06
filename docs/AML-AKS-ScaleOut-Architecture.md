@@ -4,6 +4,7 @@
 > **Owner:** ML Platform Team
 > **Last updated:** May 2026
 > **Audience:** ML Platform Engineers, Cloud Architects, FinOps, AKS Platform Team
+> **Primary region:** Australia East (`australiaeast` / `aue`) · **Secondary region (DR / endpoint-cap relief):** Australia Southeast (`australiasoutheast` / `ase`)
 > **Companion to:** [`AML-Scale-Out-Architecture.md`](AML-Scale-Out-Architecture.md) (managed-compute variant)
 
 ---
@@ -211,7 +212,7 @@ The 100-endpoint per-sub-per-region cap is the only AML quota that AKS does not 
 
 1. **One workspace per product can comfortably host 1 batch endpoint** with up to 20 deployments. At 334 products this still requires 334 endpoints per sub.
 2. **File a [request for endpoint limit increase](https://learn.microsoft.com/azure/machine-learning/how-to-manage-quotas?view=azureml-api-2#endpoint-limit-increases)** at vend time. Microsoft routinely approves raises to several hundred endpoints per subscription per region for batch-only estates.
-3. **Multi-region** — split product groups across two regions (e.g. `weu` and `neu`). The 100-endpoint cap is per **region** per sub, so a single subscription comfortably holds 200+ endpoints when products are evenly placed across two paired regions.
+3. **Multi-region** — split product groups across **Australia East** (primary) and **Australia Southeast** (paired). The 100-endpoint cap is per **region** per sub, so a single subscription comfortably holds 200+ endpoints when products are evenly placed across both Australian regions, while preserving in-country data residency.
 
 If neither raise nor multi-region is acceptable, fall back to **6 product-groups per env (18 subs total)** instead of 3 — still 7× fewer subs than v1.
 
@@ -377,24 +378,24 @@ The dominant v1 cost at 1,000 products is **per-product `AmlCompute` clusters th
 
 ```mermaid
 flowchart LR
-    subgraph WEU["Region: West Europe"]
-        WEU_PG["aml-aks-prd-pg01-weu<br/>AKS cluster + 334 workspaces"]
+    subgraph AUE["Region: Australia East (primary)"]
+        AUE_PG["aml-aks-prd-pg01-aue<br/>AKS cluster + 334 workspaces"]
     end
-    subgraph NEU["Region: North Europe (paired)"]
-        NEU_PG["aml-aks-prd-pg01-neu<br/>AKS cluster + warm standby"]
+    subgraph ASE["Region: Australia Southeast (paired)"]
+        ASE_PG["aml-aks-prd-pg01-ase<br/>AKS cluster + warm standby"]
     end
     REG["AML Registry<br/>(prd)"]
-    WEU_PG --> REG
-    NEU_PG --> REG
-    REG -- "model & env<br/>replication" --> WEU_PG
-    REG -- "model & env<br/>replication" --> NEU_PG
+    AUE_PG --> REG
+    ASE_PG --> REG
+    REG -- "model & env<br/>replication" --> AUE_PG
+    REG -- "model & env<br/>replication" --> ASE_PG
 ```
 
 - **Active / warm-standby AKS pair** per product-group sub for prod (control plane separate; node pools warm at min only).
 - **AML Registry** ([docs](https://learn.microsoft.com/azure/machine-learning/how-to-manage-registries?view=azureml-api-2)) per env at the platform sub level — promotes models, environments, and components across workspaces and regions.
 - **ADLS / Storage**: GRS or RA-GRS for prod artifact stores; product data lake replication is owned by the data-platform team.
 - **DR runbook**: failover = re-target the batch endpoint deployment to the standby cluster; no model re-train needed.
-- This also **lifts the 100-endpoint regional cap** by spreading endpoints across two paired regions.
+- This also **lifts the 100-endpoint regional cap** by spreading endpoints across the two paired Australian regions (Australia East and Australia Southeast).
 
 ---
 
@@ -498,9 +499,9 @@ For each env [dev, tst, prd]:
   - aks-platform-cluster already exists → skip step 5
   - aml-product-stamp:
      - rg-aml-{env}-p501 created
-     - workspace mlw-{env}-p501-weu provisioned
+     - workspace mlw-{env}-p501-aue provisioned
      - dependent ADLS / KV / AI / UAMI / PEs provisioned
-     - Kubernetes namespace ws-p501 created on aks-{env}-pg02-weu
+     - Kubernetes namespace ws-p501 created on aks-{env}-pg02-aue
      - ResourceQuota: 32 CPU, 128Gi memory, 1 GPU, 50 pods
      - workspace attached as KubernetesCompute "aks-shared-{env}"
      - batch endpoint bep-p501 created targeting "aks-shared-{env}", instance type cpu-medium
@@ -542,7 +543,7 @@ This design is linear in **AKS cluster pairs**, not subscriptions.
 Early-warning thresholds (emit from stamping pipeline):
 
 - Workspaces in a sub ≥ **300** (90 % of 334 budget) → vend next product-group sub.
-- Endpoints in a sub ≥ **75** of cap → file raise or split to second region.
+- Endpoints in a sub ≥ **75** of cap → file raise or split product-group to Australia Southeast.
 - Any node pool max sustained > **80 %** for > 1 day → scale max-count or add a node pool.
 - AML extension version drift > 2 minor versions → schedule cluster upgrade.
 - Cost per product per month above a target threshold → review `ResourceQuota` and instance-type catalogue.
@@ -592,7 +593,7 @@ Early-warning thresholds (emit from stamping pipeline):
 | K3 | One shared AKS cluster pair per env per sub (per region for prod) | Simplest mapping of subscription → cluster; fewer control planes; fits the 5,000-cluster-per-sub headroom comfortably |
 | K4 | Dedicated namespace per workspace (`ws-p{nnn}`) on the shared cluster | Standard Kubernetes isolation primitive; integrates with `ResourceQuota`, NetworkPolicy, AML taints |
 | K5 | Subscription split = 3 product-groups × 3 envs at 1,000 products (9 subs total) | Driven by endpoint cap (still per-sub-per-region); 13× fewer subs than v1 |
-| K6 | File pre-emptive endpoint-cap raises on prod subs and use a second region | Endpoint count is the only AML quota AKS does not lift; multi-region is also DR-positive |
+| K6 | File pre-emptive endpoint-cap raises on prod subs and use Australia Southeast as paired region | Endpoint count is the only AML quota AKS does not lift; the in-country pair is also DR-positive and preserves data residency |
 | K7 | Spot node pools default for dev/test and exploration; on-demand only for SLA-bound prod | 60 – 90 % cost saving; matches WAF Cost Optimization low-priority guidance |
 | K8 | Reserved Instances or Savings Plan on system pool + 50 % of `cpu-od` baseline | Predictable baseline → up to 65 % saving |
 | K9 | Cluster Autoscaler with `min=0` on every user pool | Idle-cost approaches AKS control plane only |
