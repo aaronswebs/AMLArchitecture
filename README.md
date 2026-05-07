@@ -46,6 +46,24 @@ flowchart TB
 
 The v2 (AKS) variant collapses the same 1,000-product capacity into **9 subscriptions** in Australia East with the same on-demand Australia Southeast option.
 
+## Glossary
+| **Item** | **Description** |
+|---|---|
+| ALZ | see Application Landing Zone |
+| Application Landing Zone | A governed Azure subscription environment where a specific application/workload is deployed and operated, used whenever onboarding or scaling workloads into a standardized, compliant cloud foundation. |
+| ESLZ | see Enterprise Scale Landing Zone |
+| Enterprise Scale Landing Zone | A centrally governed platform foundation (hub) providing shared networking, identity, security, and management services that enable multiple application landing zones—rather than hosting workloads itself. |
+| AML | see Azure Machine Learning |
+| Azure Machine Learning | A cloud ML platform combining multiple Azure services to manage the ML lifecycle, using managed compute and endpoints for simplified deployment or Azure Kubernetes Service (AKS) for scalable, infrastructure-controlled workloads. |
+| AML managed compute | Azure-managed VM or auto-scaling cluster used to run training or inference workloads without managing infrastructure. With limitations subject to Azure quotas (cores/resources), limited infrastructure control, and constrained by predefined VM sizes, regions, and service limits. |
+| AML Product | A Line of Business oriented technical solution that contains a workspace for data processing to train models or deploy a trained model and execute for inferencing. |
+| Azure Policy | A governance service that defines and enforces rules on Azure resources to ensure compliance with organisational standards at scale. Used to deny deployment or enforce configuration of acceptable resources including network, compute, storage, key-vault, workspaces, defined SKUs etc.. |
+| Policy Initiative | Policies (or policy initiatives) are assigned at management group, subscription, or resource scope during or after deployment to enforce governance automatically. |
+| Azure Subscription | A logical container and core unit of governance, billing, and scale that acts as the primary boundary for resources, and is required for scale because workloads are distributed across multiple subscriptions to avoid platform limits and enable independent governance, quotas, and isolation. |
+| Azure limit |  A system‑enforced maximum for resource counts, capacity, or operations that defines the scaling boundary of a service or subscription. |
+| Hard limit | A fixed, non-adjustable maximum on a resource, operation, or capacity that cannot be increased and defines an absolute scaling boundary for a service. |
+| Soft limit | An adjustable quota that defines a default maximum for a resource or capacity but can be increased on request to support scaling needs. Soft limits can be raised through support or quota requests, whereas hard limits are fixed platform constraints that cannot be exceeded and must be architected around. |
+
 ## Contents
 
 Two reference architectures cover the same scenario from different angles. Pick by scale and operating model. Both target **1,000+ products** with **Australia East as primary** and **Australia Southeast as on-demand paired region**.
